@@ -1,4 +1,4 @@
-data = load('cigan.mat');
+data = load('dataset.mat');
 %% 
 t = data.cigan.X.Data';
 u = data.cigan.Y(:, 3).Data';
