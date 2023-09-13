@@ -43,15 +43,14 @@ D = 0;
 sysOne = ss(A,B,C,D);
 ysimOne = lsim(sysOne, u_new-u_new(1), t, w(1));
 
-plot(t, ysimOne);
+plot(t, ysimOne); 
 title('Identificare clasica - Neparametrica');
 legend('Factor de umplere PWM', 'Viteza', 'Y63', 'Modelul');
 xlabel('Timp');
 ylabel('Amplitudine');
 
-J = sqrt(1/length(w)*sum((w-ysimOne ).^2))
-eMPN = norm(w-ysimOne)/norm(w-mean(w))
-
+J = getRelativeError(w, ysimOne)
+eMPN = getNormalizedMeanSquaredError(w, ysimOne)
 %% viteza - pozitie neparametrica
 
 i8 = 7434;
@@ -75,7 +74,7 @@ legend('Pozitia identificata', 'Pozitia propriu zisa')
 xlabel('Timp');
 ylabel('Amplitudine');
 
-eMPN_pozitie = norm(poz - ysimTwo) / norm(poz - mean(poz))
+eMPN_pozitie = norm(poz - ysimTwo) / norm(poz - mean(poz));
 
 %% Functia de transfer cu timp mort
 
@@ -129,6 +128,7 @@ sysOne = ss(A,B,C,D);
 ysim = lsim(sysOne, u_new, t, w(1));
 
 eMPN = norm(w-ysim)/norm(w-mean(w));
+fprintf(eMPN);
 
 plot(t, [w, ysim]);
 legend('Viteza propriu zisa', 'Viteza identificata')
@@ -165,6 +165,7 @@ sysTwo = ss(A,B,C,D);
 ysim = lsim(sysTwo, u_new, t, w(1));
 
 eMPN = norm(w-ysim)/norm(w-mean(w));
+fprintf(eMPN);
 
 plot(t, [w, ysim]);
 legend('Viteza propriu zisa', 'Viteza identificata')
@@ -191,6 +192,8 @@ sys_armax_poz_vit = arx(data_id_poz_vit, [1, 1, 0]);
 Hw_armax_pozitie_viteza = tf(sys_armax_poz_vit.B, sys_armax_poz_vit.A, Te, 'variable', 'z^-1');
 Hw_armax_pozitie_viteza_continuu = tf(0.02841 / Te, [1, 0]);
 
+fprintf(Hw_armax_pozitie_viteza_continuu)
+
 A = 0;
 B = 4.932;
 C = 1;
@@ -205,6 +208,7 @@ xlabel('Timp');
 ylabel('Amplitudine');
 
 eMPN = norm(poz-ysim)/norm(poz-mean(poz));
+fprintf(eMPN);
 
 % Plotare
 figure;
