@@ -3,13 +3,13 @@ data = load('dataset.mat');
 t = data.cigan.X.Data';
 u = data.cigan.Y(:, 3).Data';
 w = data.cigan.Y(:, 2).Data';
-poz = data.cigan.Y(:, 1).Data';
+pos = data.cigan.Y(:, 1).Data';
 
 plot(t, [200*u, w]); hold on;
 xlabel('Timp');
 ylabel('Amplitudine');
 
-%% 
+%% intrare-viteza neparametric
 
 i3 = 7434;
 i4 = 7687;
@@ -36,219 +36,202 @@ Tau_m = t(Tm_i8) - t(Tm_i7);
 nidx = round(Tau_m / (t(12)-t(11)));
 u_new = [u(1)*ones(nidx,1); u(1:length(u)-nidx)];
 
-A = -1/T;
-B = K/T; 
-C = 1;
-D = 0;
-sysOne = ss(A,B,C,D);
-ysimOne = lsim(sysOne, u_new-u_new(1), t, w(1));
+[A, B, C, D] = getStateSpaceForSysOrderOne(K, T);
 
-plot(t, ysimOne); 
+sysUW = ss(A,B,C,D);
+ysimUW = lsim(sysUW, u_new-u_new(1), t, w(1));
+
+plot(t, ysimUW); 
 title('Identificare clasica - Neparametrica');
 legend('Factor de umplere PWM', 'Viteza', 'Y63', 'Modelul');
 xlabel('Timp');
 ylabel('Amplitudine');
 
-J = getRelativeError(w, ysimOne)
-eMPN = getNormalizedMeanSquaredError(w, ysimOne)
+J = getRelativeError(w, ysimUW)
+eMPN = getNormalizedMeanSquaredError(w, ysimUW)
 %% viteza - pozitie neparametrica
 
 i8 = 7434;
 i9 = 7687;
 
-K_poz = (poz(i9)-poz(i8))/(mean(w(i8:i9))*(t(i9)-t(i8)));
+K_poz = (pos(i9)-pos(i8))/(mean(w(i8:i9))*(t(i9)-t(i8)));
 
-A1 = [-1/T 0; K_poz 0];
-B1 = [K/T; 0];
-C1 = [1 0 ; 0 1];
-D1 = [0; 0];
+A_pos = [-1/T 0; K_poz 0];
+B_pos = [K/T; 0];
+C_pos = [1 0 ; 0 1];
+D_pos = [0; 0];
 
-sysTwo = ss(A1, B1, C1, D1);
-ysimTwo = lsim(sysTwo , u, t, [w(1), poz(1)]);
-ysimTwo = ysimTwo(:,2);
+sysWPos = ss(A_pos, B_pos, C_pos, D_pos);
+ysimWPos = lsim(sysWPos , u, t, [w(1), pos(1)]);
+ysimWPos = ysimWPos(:,2);
 
 figure
-plot(t, ysimTwo, t, poz), 
+plot(t, ysimWPos, t, pos), 
 title("Suprapunerea intre integrata vitezei peste pozitie")
 legend('Pozitia identificata', 'Pozitia propriu zisa')
 xlabel('Timp');
 ylabel('Amplitudine');
 
-eMPN_pozitie = norm(poz - ysimTwo) / norm(poz - mean(poz));
+eMPN_pozitie = getNormalizedMeanSquaredError(pos, ysimWPos)
 
 %% Functia de transfer cu timp mort
 
-Hs = tf(K, [T, 1], 'IODelay', Tau_m);
+Hs = tf(K, [T, 1], 'IODelay', Tau_m)
 
-%% Preluare date din grafic
+%% Preluare date din grafic si preprocesare
 
 u = double(u);
 t = double(t);
 w = double(w);
-poz = double(poz);
+pos = double(pos);
 
 i1 = 1155;
 i2 = 3058;
 i3 = 4475;
 i4 = 6208;
-pas = 8;
+step = 8;
 
-t_id = u(i1:pas:i2);
-u_id = u(i1:pas:i2);
-w_id = w(i1:pas:i2);
-p_id = poz(i1:pas:i2);
+t_identification = u(i1:step:i2);
+u_identification = u(i1:step:i2);
+w_identification = w(i1:step:i2);
+pos_identification = pos(i1:step:i2);
 
-t_vd = u(i3:pas:i4);
-u_vd = u(i3:pas:i4);
-w_vd = w(i3:pas:i4);
-p_vd = poz(i3:pas:i4);
+t_validation = u(i3:step:i4);
+u_validation = u(i3:step:i4);
+w_validation = w(i3:step:i4);
+pos_validation = pos(i3:step:i4);
 
-Te = pas * (t(5) - t(4));
-data_id = iddata(w_id, u_id, Te);
-data_vd = iddata(w_vd, u_vd, Te);
+Te = step * (t(5) - t(4));
+data_identification = iddata(w_identification, u_identification, Te);
+data_validation = iddata(w_validation, u_validation, Te);
 
 %% Autocorelatie Intrare-Viteza cu ARMAX
-sys_armax = armax(data_id, [1, 1, 1, 1]); % inclus gradul mort
+sys_armax = armax(data_identification, [1, 1, 1, 1]);
 
-% Scoatem functia de transfer
-Hw_armax_viteza = tf(sys_armax.B, sys_armax.A, Te, 'variable', 'z^-1');
-Hw_armax_viteza_continuu = d2c(Hw_armax_viteza, 'zoh');
+Hw_armax_w = tf(sys_armax.B, sys_armax.A, Te, 'variable', 'z^-1');
+Hw_armax_w_continuous = d2c(Hw_armax_w, 'zoh');
 
+% extracted from continuous Hw_armax_w_continuous
 K = 3172 / 12.97;
 T = 1 / 12.97;
 
 Hfinal = tf(K, [T, 1]);
 
-A = -1/T;
-B = K/T; 
-C = 1;
-D = 0;
+[A, B, C, D] = getStateSpaceForSysOrderOne(K, T);
 
-sysOne = ss(A,B,C,D);
-ysim = lsim(sysOne, u_new, t, w(1));
+sysArmaxUW = ss(A,B,C,D);
+ysimUW = lsim(sysArmaxUW, u_new, t, w(1));
 
-eMPN = norm(w-ysim)/norm(w-mean(w));
-fprintf(eMPN);
+eMPN = getNormalizedMeanSquaredError(w, ysimUW)
 
-plot(t, [w, ysim]);
+plot(t, [w, ysimUW]);
 legend('Viteza propriu zisa', 'Viteza identificata')
 xlabel('Timp');
 ylabel('Amplitudine');
 
-% Plotare
 figure;
 subplot(1, 2, 1)
-compare(data_vd, sys_armax)
+compare(data_validation, sys_armax)
 title('Compare Viteza-Intrare cu ARMAX');
 subplot(1, 2, 2)
-resid(data_vd, sys_armax)
+resid(data_validation, sys_armax)
 title('Resid Viteza-Intrare cu ARMAX');
 
 %% Intercorelatie / XCorelatie Intrare-Viteza cu iv4
 
-sys_iv4 = iv4(data_id, [1, 1, 1]);
+sys_iv4 = iv4(data_identification, [1, 1, 1]);
 
-% Scoatem functia de transfer
-Hw_iv4_viteza = tf(sys_iv4.B, sys_iv4.A, Te, 'variable', 'z^-1');
-Hw_iv4_viteza_continuu = d2c(Hw_iv4_viteza, 'zoh');
+Hw_iv4_w = tf(sys_iv4.B, sys_iv4.A, Te, 'variable', 'z^-1');
+Hw_iv4_w_continuous = d2c(Hw_iv4_w, 'zoh');
 
+% extracted from continuous Hw_iv4_w_continuous
 K = 5210 / 21.4;
 T = 1 / 21.4;
 HFinal2 = tf(K, [T, 1]);
 
-A = -1/T;
-B = K/T; 
-C = 1;
-D = 0;
+[A, B, C, D] = getStateSpaceForSysOrderOne(K, T);
 
-sysTwo = ss(A,B,C,D);
-ysim = lsim(sysTwo, u_new, t, w(1));
+sysIv4UW = ss(A, B, C, D);
+ysimUW = lsim(sysIv4UW, u_new, t, w(1));
 
-eMPN = norm(w-ysim)/norm(w-mean(w));
-fprintf(eMPN);
+eMPN = getNormalizedMeanSquaredError(w, ysimUW)
 
-plot(t, [w, ysim]);
+plot(t, [w, ysimUW]);
 legend('Viteza propriu zisa', 'Viteza identificata')
 xlabel('Timp');
 ylabel('Amplitudine');
 
-% Plotare
 figure;
 subplot(1, 2, 1)
-compare(data_vd, sys_iv4)
+compare(data_validation, sys_iv4)
 title('Compare intrare-viteza cu iv4');
 subplot(1, 2, 2)
-resid(data_vd, sys_iv4)
+resid(data_validation, sys_iv4)
 title('Resid intrare-viteza cu iv4');
 
 %% Autocorelatie Viteza-Pozitie cu ARX
 
-data_id_poz_vit = iddata(p_id, w_id, Te);
-data_vd_poz_vit = iddata(p_vd, w_vd, Te);
+data_id_pos_w = iddata(pos_identification, w_identification, Te);
+data_vd_pos_w = iddata(pos_validation, w_validation, Te);
 
-sys_armax_poz_vit = arx(data_id_poz_vit, [1, 1, 0]);
+sys_armax_pos_w = arx(data_id_pos_w, [1, 1, 0]);
 
-% Scoatem functia de transfer
-Hw_armax_pozitie_viteza = tf(sys_armax_poz_vit.B, sys_armax_poz_vit.A, Te, 'variable', 'z^-1');
-Hw_armax_pozitie_viteza_continuu = tf(0.02841 / Te, [1, 0]);
+Hw_arx_pos_w = tf(sys_armax_pos_w.B, sys_armax_pos_w.A, Te, 'variable', 'z^-1');
+Hw_arx_pos_w_continuous = tf(0.02841 / Te, [1, 0])
 
-fprintf(Hw_armax_pozitie_viteza_continuu)
-
+% extracted from continuous Hw_arx_pos_w_continuous
 A = 0;
 B = 4.932;
 C = 1;
 D = 0;
 
-sysThree = ss(A,B,C,D);
-ysim = lsim(sysThree, w, t, poz(1));
+sysArxPosW = ss(A,B,C,D);
+ysimUW = lsim(sysArxPosW, w, t, pos(1));
 
-plot(t, [poz, ysim]);
+plot(t, [pos, ysimUW]);
 legend('Pozitia propriu zisa', 'Pozitia identificata')
 xlabel('Timp');
 ylabel('Amplitudine');
 
-eMPN = norm(poz-ysim)/norm(poz-mean(poz));
-fprintf(eMPN);
+eMPN = getNormalizedMeanSquaredError(pos, ysimUW)
 
-% Plotare
 figure;
 subplot(1, 2, 1)
-compare(data_vd_poz_vit, sys_armax_poz_vit)
+compare(data_vd_pos_w, sys_armax_pos_w)
 title('Compare Pozitie-Viteza cu ARMAX');
 subplot(1, 2, 2)
-resid(data_vd_poz_vit, sys_armax_poz_vit)
+resid(data_vd_pos_w, sys_armax_pos_w)
 title('Resid Pozitie-Viteza cu ARMAX');
 
 %% Intercorelatie / XCorelatie Viteza-Pozitie cu OE
 
-data_id_poz_vit = iddata(p_id, w_id, Te);
-data_vd_poz_vit = iddata(p_vd, w_vd, Te);
-sys_oe_poz_vit = oe(data_id_poz_vit, [1, 1, 0]); % inclus gradul mort
+data_id_pos_w = iddata(pos_identification, w_identification, Te);
+data_vd_pos_w = iddata(pos_validation, w_validation, Te);
+sys_oe_pos_w = oe(data_id_pos_w, [1, 1, 0]); % inclus gradul mort
 
-% Scoatem functia de transfer
-Hw_oe_pozitie_viteza = tf(sys_oe_poz_vit.B, sys_oe_poz_vit.F, Te, 'variable', 'z^-1');
-Hw_armax_pozitie_viteza_continuu = tf(0.02841 / Te, [1, 0]);
+Hw_oe_pos_w = tf(sys_oe_pos_w.B, sys_oe_pos_w.F, Te, 'variable', 'z^-1');
+Hw_oe_pos_w_continuous = tf(0.02841 / Te, [1, 0]);
 
+% extracted from continuous Hw_oe_pos_w_continuous
 A = 0;
 B = 4.932;
 C = 1;
 D = 0;
 
-sysThree = ss(A,B,C,D);
-ysim = lsim(sysThree, w, t, poz(1));
+sysOePosW = ss(A,B,C,D);
+ysimUW = lsim(sysOePosW, w, t, pos(1));
 
-plot(t, [poz, ysim]);
+plot(t, [pos, ysimUW]);
 legend('Pozitia propriu zisa', 'Pozitia identificata')
 xlabel('Timp');
 ylabel('Amplitudine');
 
-eMPN = norm(poz-ysim)/norm(poz-mean(poz));
+eMPN = getNormalizedMeanSquaredError(pos, ysimUW)
 
-% Plotare
 figure;
 subplot(1, 2, 1)
-compare(data_vd_poz_vit, sys_oe_poz_vit)
+compare(data_vd_pos_w, sys_oe_pos_w)
 title('Compare Pozitie-Viteza cu OE');
 subplot(1, 2, 2)
-resid(data_vd_poz_vit, sys_oe_poz_vit)
+resid(data_vd_pos_w, sys_oe_pos_w)
 title('Resid Pozitie-Viteza cu OE');
